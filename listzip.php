@@ -4,24 +4,26 @@ if (!class_exists('CFRuntime'))
 
 class listzip {
 
-    const BUCKET = 'YOUR-DEFAULT-BUCKET';
+    const BUCKET = 'YOUR-DEFAULT-BUCKET'; // or pass in the call to "files"
+    
+    // define here or pass in to the constructor
     const S3USER_ACCESS_KEY = 'YOUR-ACCESS-KEY';
     const S3USER_SECRET_KEY = 'YOUR-SECRET-KEY';
     private $S3;
     
-    function __construct() {
-	   $this->S3 = new AmazonS3(self::S3USER_ACCESS_KEY, self::S3USER_SECRET_KEY);
+    function __construct($key = self::S3USER_ACCESS_KEY, $secret = self::S3USER_SECRET_KEY) {
+	   $this->S3 = new AmazonS3($key, $secret);
        //$this->S3->set_region(AmazonS3::REGION_EU_W1);
     }
 
-    function files($zipfile, $bucket) {
+    function files($zipfile, $bucket = self::BUCKET) {
 
 		// this will be the return array of file info
         $ret = array();
 
 		// get the headers for the zip file from S3
 		// this will give us the size of the zip file (content-length)
-        $res = $this->S3->get_object_headers($bucket, $filename);
+        $res = $this->S3->get_object_headers($bucket, $zipfile);
         $headers = $res->header; 
         // if the header is not present for any reason, return an empty result
         if (!isset($headers['content-length'])) return $ret;
@@ -43,13 +45,12 @@ class listzip {
         
         // unpack the central directory data into an array
         while (strlen($files) > 1) {
+        	// unpack the first 46 bytes of the string
             $file = unpack('a2pk/vcode/Cversion/Chostos/Cminver/Ctargetos/vgpbit/vmethod/Vdate/Vcrc/Vcsize/Vusize/vnamelength/vextralength/vcommentlength/vdiskno/vattrs/Vexattrs/Vheaderoffset', $files);
-            $file += array('filename' => substr($files, 46, $file['namelength']),
-                                   'extra' => substr($files, 46 + $file['namelength'], $file['extralength']),
-                                   'comment' => substr($files, 46 + $file['namelength'] + $file['extralength'], $file['commentlength']),
-                                   'timestamp' => $this->dosToUnixTime($file['date']) // convert dos time to unix timestamp (see below)
+            $ret[] = array('filename' => substr($files, 46, $file['namelength']),
+            			   'size' => $file['usize'],
+                           'timestamp' => date('c', $this->dosToUnixTime($file['date'])) // convert dos time to human readable
                           );
-            $ret[] = $file;
             $files = substr($files, 46 + $file['namelength'] + $file['extralength'] + $file['commentlength']);
         }
         return $ret;
